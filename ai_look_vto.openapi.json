@@ -1,0 +1,702 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "AI Look Virtual Try-On",
+    "description": "# Overview\nThe AI Look Virtual Try-On API provides a complete workflow for applying professionally designed facial looks to user photos. Each look is crafted by beauty experts and can be applied instantly via API.\n\n## Integration Guide\nThis guide walks you through:\n\n*   **Endpoint:** `/s2s/v2.0/task/look-vto`\n*   **Authentication:** All requests require an `Authorization: Bearer <TOKEN>`\n*   **Workflow:**\n    1.  **Prepare a selfie:** Uploading an image or provide a valid image URL\n    1.  **List look templates:** Listing available AI look templates\n    1.  **Start Task (`POST`):** Submit your image id/URL and a look ``template_id``.\n    1.  **Retrieve Task ID:** Capture the `task_id` from the response.\n    1.  **Poll Status (`GET`):** Use the `task_id` to check the status of the task. Continue polling until `task_status` is `\"success\"` or `\"error\"`.\n\n---\n\n* API Playground\n\nInteractively explore and test the API using our official playground:\n\n**API Playground:**\n[http://yce.makeupar.com/api-console/en/api-playground/ai-look-virtual-try-on/](http://yce.makeupar.com/api-console/en/api-playground/ai-look-virtual-try-on/)\n\n---\n\n* Authentication\n- Include your API key in the request header using **Bearer Token**:\n    ```\n    Authorization: Bearer <API Key>\n    ```\nYou can find your API Key at https://yce.makeupar.com/api-console/en/api-keys/.\n\n\n* 1. Upload an Image\n\nYou may upload a file directly to the server or provide a valid image URL in the VTO task payload.\n\n   * Upload Endpoint\n\n```\nPOST /s2s/v2.0/file\n```\n\nAlternatively, skip this step if you already have a public image URL.\n\n---\n\n* 2. List Available Look Styles\n\nRetrieve all AI makeup look templates available for virtual try-on.\n\n   * Endpoint\n\n```\nGET /s2s/v2.0/task/template/look-vto\n```\n\n   * Query Parameters\n\n| Parameter        | Description                     |\n| ---------------- | ------------------------------- |\n| `page_size`      | Number of items per page        |\n| `starting_token` | Token for pagination (optional) |\n\n   * Sample Javascript Request\n\n```javascript\nconst data = null;\n\nconst xhr = new XMLHttpRequest();\nxhr.withCredentials = true;\n\nxhr.addEventListener('readystatechange', function () {\n    if (this.readyState === this.DONE) {\n        console.log(this.responseText);\n    }\n});\n\nxhr.open('GET', 'https://yce-api-01.makeupar.com/s2s/v2.0/task/template/look-vto?page_size=20&starting_token=73a3c9e69b89');\nxhr.setRequestHeader('Authorization', 'Bearer <access_token for v1, API Key for v2>');\n\nxhr.send(data);\n```\n\n   * Sample Successful Response\n\n```json\n{\n  \"status\": 200,\n  \"data\": {\n    \"templates\": [\n      {\n        \"id\": \"good_template_001\",\n        \"thumb\": \"thumbnail preview image URL\",\n        \"title\": \"Berry Smooth\",\n        \"category_name\": \"Daily\"\n      }\n    ],\n    \"next_token\": 73a3c9e69b89\n  }\n}\n```\n\n> **Note:** Use the `id` value (`template_id`) when creating the Look VTO task.\n\n---\n\n* 3. Create a Look VTO Task and Poll for Results\n\nOnce you have an image and a template ID, create a task. The API processes the request asynchronously. You must poll the task status until it reaches `success` or `error`.\n\n   * Create Task Endpoint\n\n```\nPOST /s2s/v2.0/task/look-vto\n```\n\n   * Polling Endpoint\n\n```\nGET /s2s/v2.0/task/look-vto/{task_id}\n```\n\n---\n\n   * Sample JavaScript Implementation\n\n```javascript\nconst BASE_URL = 'https://yce-api-01.makeupar.com/s2s/v2.0/task/look-vto';\nconst START_METHOD = 'POST';\nconst HEADERS = {\n  \"Content-Type\": \"application/json\",\n  \"Authorization\": \"Bearer YOUR_API_KEY\"\n};\n\nconst sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\n\nasync function startTask() {\n  const init = {\n    method: START_METHOD,\n    headers: HEADERS,\n    body: JSON.stringify({\n      \"src_file_url\": \"https://plugins-media.makeupar.com/strapi/assets/sample_Image_7_fa28b2618a.jpg\",\n      \"template_id\": \"all_rosy_chic\"\n    })\n  };\n\n  const res = await fetch(BASE_URL, init);\n  if (!res.ok) throw new Error(`Start request failed: ${res.status} ${res.statusText}`);\n\n  const payload = await res.json().catch(() => ({}));\n  const taskId = payload?.data?.task_id;\n  if (!taskId) throw new Error('task_id missing: ' + JSON.stringify(payload));\n\n  console.log('[startTask] Task started, id =', taskId);\n  return taskId;\n}\n\nasync function pollTask(taskId, { intervalMs = 2000, maxAttempts = 300 } = {}) {\n  for (let attempt = 1; attempt <= maxAttempts; attempt++) {\n    const pollUrl = `${BASE_URL}/${taskId}`;\n    const res = await fetch(pollUrl, { method: 'GET', headers: HEADERS });\n\n    if (!res.ok) throw new Error(`Polling failed: ${res.status} ${res.statusText}`);\n\n    const payload = await res.json().catch(() => ({}));\n    const status = payload?.data?.task_status;\n    console.log(`[pollTask] Attempt ${attempt} status = ${status}`);\n\n    if (status === 'success') {\n      console.log('[pollTask] Success results:', payload?.data?.results);\n      return payload;\n    }\n\n    if (status === 'error') {\n      throw new Error('Task failed: ' + JSON.stringify(payload));\n    }\n\n    await sleep(intervalMs);\n  }\n\n  throw new Error('Polling timeout: Max attempts exceeded');\n}\n\n(async () => {\n  try {\n    const taskId = await startTask();\n    const final = await pollTask(taskId);\n    console.log('[main] Final response:', final);\n  } catch (e) {\n    console.error('[main] Flow error:', e);\n  }\n})();\n```\n\n---\n\n   * Sample Success Response\n\n```json\n{\n  \"status\": 200,\n  \"data\": {\n    \"results\": {\n      \"url\": \"https://yce-us.s3-accelerate.amazonaws.com/demo/.../result.jpg?...\"\n    },\n    \"task_status\": \"success\"\n  }\n}\n```\n\nThe `results.url` field contains the final rendered virtual makeup image.\n\n---\n\n* Summary\n\n| Step                       | Description                              |\n| -------------------------- | ---------------------------------------- |\n| **1. Upload Image**        | Upload directly or provide an image URL. |\n| **2. List Look Templates** | Retrieve available look styles with IDs. |\n| **3. Create VTO Task**     | Submit image URL + template ID.          |\n| **4. Poll for Completion** | Retrieve the final result image URL.     |\n\nThis workflow ensures a reliable, developer-friendly integration for real-time virtual makeup try-on experiences.\n\n---\n\n## File Specs & Errors\n* Supported Formats & Dimensions\n\n|AI Feature|Supported Dimensions|Supported File Size|Supported Formats|\n|  ----  | ----  | ----  | ----  |\n|AI Look Virtual Try-On|long side < 1920, face width >= 100|< 10MB|jpg/jpeg/png|\n\n* Error Codes\n\n|Error Code|Description|\n|  ----  | ----  |\n|error_below_min_image_size|the size of the source image is smaller than minimum (expect: width >= 100px, height >= 100px)\n|error_exceed_max_image_size|the size of the source image is larger than maximum (expect: width < 1920px, height < 1080px)\n|error_face_position_invalid |Please ensure your entire face is fully visible within the image|\n|error_face_position_too_small|The detected face is too small. Move closer to the camera|\n|error_face_position_out_of_boundary|The face is too large or partially outside the image frame. Adjust your position|\n|error_face_angle_invalid|The face angle is incorrect. For front-facing photos, keep your head within 10°. For side-facing photos, ensure more than 15°.|\n\n* Environment & Dependency\n\n| Sample Code Language / Tool | Recommended Runtime Versions |\n|---|---|\n| cURL | - bash >= 3.2</br>   - curl >= 7.58 (modern TLS/HTTP support)</br>   - jq >= 1.6 (robust JSON parsing) |\n| Node.js (JavaScript) | Node >= 18 (for global fetch) |\n| JavaScript | - Chrome / Edge >= 80</br>   - Firefox >= 74</br>   - Safari >= 13.1 |\n| PHP | PHP >= 7.4 (for modern TLS/compat), ext-curl (recommended) or allow_url_fopen=On + ext-openssl, ext-json |\n| Python | Python >= 3.10 (for f-strings), requests >= 2.20.0 |\n| Java | Java 11+ (for HttpClient), Jackson Databind >= 2.12.0 |\n\n---\n\n## Unit Consumption\n\n| AI Feature | Unit Consumed |\n|---|---|\n| AI Look Virtual Try-On V1.0 | 2 |\n\n---\n",
+    "version": "",
+    "termsOfService": "https://www.makeupar.com/perfectbeauty/youcam/terms-of-service-api",
+    "contact": {
+      "email": "YouCamOnlineEditor_API@perfectcorp.com"
+    },
+    "license": {
+      "name": "Privacy policy",
+      "url": "https://www.makeupar.com/perfectbeauty/youcam/privacy-policy-api"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://yce-api-01.makeupar.com"
+    }
+  ],
+  "tags": [
+    {
+      "name": "V1.0",
+      "description": "Generate virtual try-on experiences for full looks from uploaded images using AI processing."
+    }
+  ],
+  "paths": {
+    "/s2s/v2.0/task/template/look-vto": {
+      "get": {
+        "summary": "List predefined templates.",
+        "tags": [
+          "V1.0"
+        ],
+        "security": [
+          {
+            "BearerAuthenticationV2": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "example": 20
+            },
+            "description": "Number of results to return in this page. Valid value should be between 1 and 20. Default 20."
+          },
+          {
+            "name": "starting_token",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "73a3c9e69b89"
+            },
+            "description": "Token for current page. Start with `null` for the first page, and use `next_token` from the previous response to start next page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/TemplateResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParameters"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          }
+        }
+      }
+    },
+    "/s2s/v2.0/task/look-vto": {
+      "post": {
+        "summary": "Run an AI Look Virtual Try On task.",
+        "description": "This endpoint initiates the look virtual try-on process using a template and source image. The task will be processed asynchronously, and you can check its status using the task_id returned in this response.\n",
+        "tags": [
+          "V1.0"
+        ],
+        "security": [
+          {
+            "BearerAuthenticationV2": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunWithSingleTemplateAndSrcUrl"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful execution of the task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicRunTaskResponseV2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed execution of task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/responses/RunError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/s2s/v2.0/task/look-vto/{task_id}": {
+      "get": {
+        "summary": "Check the status of a AI Look Virtual Try On task.",
+        "tags": [
+          "V1.0"
+        ],
+        "security": [
+          {
+            "BearerAuthenticationV2": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "grH0CvsgXuAIHLUzD0V1Ol34hoet3R1tvdbtiVHrDb6_UqCLKIejAIajwxrhOAfe"
+            },
+            "description": "ID of task to check"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful check of the task status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatusResponseV2"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidTaskId"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "500": {
+            "$ref": "#/components/responses/TaskTimeout"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuthenticationV2": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Use the standard 'Bearer authentication'. Put your 'API Key' in header: `Authorization:Bearer YOUR_API_KEY`. Notice that there is ' ' a space between 'Bearer' and the 'YOUR_API_KEY'."
+      }
+    },
+    "schemas": {
+      "EngineErrorCode": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "exceed_max_filesize",
+          "invalid_parameter",
+          "error_download_image",
+          "error_decode_image",
+          "error_nsfw_content_detected",
+          "error_inference",
+          "unknown_internal_error"
+        ],
+        "description": "Errors:\n\n- `exceed_max_filesize` - Input file size exceeds the maximum limit\n\n- `invalid_parameter` - Invalid parameter value\n\n- `error_download_image` - Download source image error\n\n- `error_decode_image` - Decode source image error\n\n- `unknown_internal_error` - Others\n"
+      },
+      "FileV1.1": {
+        "title": "File V1.1",
+        "description": "This object represents a file.",
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "properties": {
+                "content_type": {
+                  "type": "string",
+                  "example": "image/jpg",
+                  "description": "Content MIME type for this file. Currently available values are listed in the enum."
+                },
+                "file_name": {
+                  "type": "string",
+                  "example": "my-selfie.jpg",
+                  "description": "Name of this file"
+                },
+                "file_size": {
+                  "type": "integer",
+                  "example": 50000,
+                  "description": "Content length for this file in bytes. Should not be larger than 10MB."
+                }
+              }
+            }
+          }
+        }
+      },
+      "BasicFileResponse": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "content_type": {
+                  "type": "string",
+                  "example": "image/jpg",
+                  "description": "Content MIME type for this file."
+                },
+                "file_name": {
+                  "type": "string",
+                  "example": "my-selfie.jpg",
+                  "description": "Name of this file"
+                },
+                "file_id": {
+                  "type": "string",
+                  "example": "U8aqJbsXGT537jtGnEDFHqxdDXqh8+oTF/cSkLimzuvVwMP+Jb1XbjPsf7ZgUgLY",
+                  "description": "ID of this file. Other run task API will need this `file_id`."
+                },
+                "requests": {
+                  "type": "array",
+                  "description": "Using upload `url`, `headers`, `method` below to upload file. After completion, the `file_id` is used to proceed with calling run task API.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "headers": {
+                        "type": "object",
+                        "example": {
+                          "Content-Type": "image/jpg",
+                          "Content-Length": 50000
+                        },
+                        "description": "Headers to include when uploading the file"
+                      },
+                      "url": {
+                        "type": "string",
+                        "example": "https://example.com/presigned-upload-url",
+                        "description": "URL to upload this file"
+                      },
+                      "method": {
+                        "type": "string",
+                        "example": "PUT",
+                        "description": "HTTP method to upload this file"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "FileResponseV2": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "example": 200,
+            "description": "Response status"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BasicFileResponse"
+          }
+        }
+      },
+      "BasicRunTaskV2SrcFileUrl": {
+        "title": "Run task with src file url",
+        "type": "object",
+        "required": [
+          "src_file_url"
+        ],
+        "properties": {
+          "src_file_url": {
+            "type": "string",
+            "description": "Url of the file to run task. The url should be publicly accessible.",
+            "example": "https://example.com/selfie.jpg"
+          }
+        }
+      },
+      "BasicRunTaskV2SrcFileId": {
+        "title": "Run task with src file ID",
+        "type": "object",
+        "required": [
+          "src_file_id"
+        ],
+        "properties": {
+          "src_file_id": {
+            "type": "string",
+            "description": "ID of file to run task. File ID from upload file API.",
+            "example": "pfNK5PuRe0MrwLHcGA3DOmB1ahwfXTbYHjv+KoBIxbE="
+          }
+        }
+      },
+      "BasicRunTaskV2": {
+        "title": "BasicRunTaskV2",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/BasicRunTaskV2SrcFileUrl"
+          },
+          {
+            "$ref": "#/components/schemas/BasicRunTaskV2SrcFileId"
+          }
+        ]
+      },
+      "RunWithSingleTemplate": {
+        "title": "RunWithSingleTemplate",
+        "type": "object",
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "description": "ID of the template. List predefined templates first, and use the id of a template.\n",
+            "example": "good_template_001"
+          }
+        },
+        "required": [
+          "template_id"
+        ]
+      },
+      "RunWithSingleTemplateAndSrcUrl": {
+        "title": "RunWithSingleTemplateAndSrcUrl",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunWithSingleTemplate"
+          },
+          {
+            "$ref": "#/components/schemas/BasicRunTaskV2"
+          }
+        ]
+      },
+      "BasicRunTaskResponseV2": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "description": "Response status",
+            "example": 200
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "description": "ID of this task. Task result is valid to query by this ID for 24 hours.",
+                "example": "grH0CvsgXuAIHLUzD0V1Ol34hoet3R1tvdbtiVHrDb6_UqCLKIejAIajwxrhOAfe"
+              }
+            }
+          }
+        }
+      },
+      "TaskStatusResponseBodySingleUrlResultsV2": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to download this result. Valid for 2 hours",
+            "example": "https://example.com/sample-result-url"
+          }
+        }
+      },
+      "TaskStatusResponseV2": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "description": "Response status",
+            "example": 200
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "task_status": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "success",
+                  "error"
+                ],
+                "description": "Status of this task"
+              },
+              "error": {
+                "$ref": "#/components/schemas/EngineErrorCode"
+              },
+              "error_message": {
+                "type": "string",
+                "description": "Detailed description of error"
+              },
+              "results": {
+                "$ref": "#/components/schemas/TaskStatusResponseBodySingleUrlResultsV2"
+              }
+            }
+          }
+        }
+      },
+      "Template": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the template. Use this as `template_id` when run task.",
+            "example": "good_template_001"
+          },
+          "thumb": {
+            "type": "string",
+            "description": "The thumbnail of style."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the template."
+          },
+          "category_name": {
+            "type": "string",
+            "description": "The category name of the template."
+          }
+        }
+      },
+      "Style": {
+        "type": "object",
+        "properties": {
+          "style_group_id": {
+            "type": "integer",
+            "description": "The id of style group. Use this as `style_group_id` when run task."
+          },
+          "style_id": {
+            "type": "integer",
+            "description": "The id of style. Use this as `style_ids` when run task."
+          },
+          "info": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "The style name"
+              },
+              "thumb": {
+                "type": "string",
+                "description": "The thumbnail of style"
+              }
+            },
+            "required": [
+              "title",
+              "thumb"
+            ]
+          }
+        },
+        "required": [
+          "style_group_id",
+          "style_id",
+          "info"
+        ]
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The id of category."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of category."
+          },
+          "styles": {
+            "type": "array",
+            "description": "The styles belong to this category.",
+            "items": {
+              "$ref": "#/components/schemas/Style"
+            }
+          },
+          "sub_categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "description": "The id of sub-category. Use this id to query for its content."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The name of sub-category."
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "styles",
+          "sub_categories"
+        ]
+      },
+      "TemplateResponseSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "description": "Response status",
+            "example": 200
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "templates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Template"
+                }
+              },
+              "next_token": {
+                "type": "string",
+                "example": "73a3c9e69b89",
+                "description": "Token to query next page."
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "InvalidParameters": {
+        "description": "Invalid request parameters",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "example": 400,
+                  "description": "Response status"
+                },
+                "error": {
+                  "type": "string",
+                  "description": "Error message",
+                  "example": "The operation could not be completed"
+                },
+                "error_code": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidParameters"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "InvalidApiKey": {
+        "description": "Invalid API Key or Inactive API Key or Expired API Key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "example": 401,
+                  "description": "Response status"
+                },
+                "error_code": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidApiKey",
+                    "InactiveApiKey",
+                    "ExpiredApiKey"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Too many requests within a given amount of time"
+      },
+      "RunError": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "description": "Response status",
+            "example": 400
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message",
+            "example": "The operation could not be completed"
+          },
+          "error_code": {
+            "type": "string",
+            "enum": [
+              "CreditInsufficiency",
+              "InvalidStyleGroup",
+              "InvalidStyle",
+              "BadRequest",
+              "InvalidParameters"
+            ]
+          }
+        }
+      },
+      "TaskTimeout": {
+        "description": "The task has no response in the expected time",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "description": "Response status",
+                  "example": 500
+                },
+                "error_code": {
+                  "type": "string",
+                  "enum": [
+                    "TaskTimeout"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "InvalidTaskId": {
+        "description": "Invalid task id",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "description": "Response status",
+                  "example": 400
+                },
+                "error_code": {
+                  "type": "string",
+                  "enum": [
+                    "InvalidTaskId"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "TemplateResponse": {
+        "description": "Successful retrieval of styles",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TemplateResponseSchema"
+            }
+          }
+        }
+      }
+    }
+  }
+}

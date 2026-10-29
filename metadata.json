@@ -1,0 +1,10 @@
+{
+  "name": "LOOKSMITH — AI Skin-Aware Fashion Stylist & VTO",
+  "description": "Embeddable, white-label AI fashion stylist widget powered by YouCam Skin & Tone AI, Virtual Try-On, and Gemini reasoning.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

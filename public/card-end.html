@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LOOKSMITH End Card Frame</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: radial-gradient(circle at 50% 45%, #181412 0%, #0b0908 65%, #050404 100%);
+      color: #FAF8F5;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 60px 80px;
+    }
+    .brand {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 72px;
+      font-weight: 600;
+      color: #FAF8F5;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    .tagline {
+      font-size: 17px;
+      color: #E5BA82;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 56px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+      max-width: 1040px;
+      width: 100%;
+      margin-bottom: 56px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(229, 186, 130, 0.25);
+      border-radius: 20px;
+      padding: 26px 32px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+      backdrop-filter: blur(16px);
+    }
+    .card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #34D399;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .card-badge::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #34D399;
+      box-shadow: 0 0 8px #34D399;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #FAF8F5;
+      margin-bottom: 6px;
+    }
+    .card-desc {
+      font-size: 14px;
+      color: rgba(250, 248, 245, 0.7);
+      line-height: 1.5;
+    }
+    .repo-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(229, 186, 130, 0.35);
+      border-radius: 9999px;
+      padding: 12px 32px;
+      font-family: monospace;
+      font-size: 16px;
+      color: #FAF8F5;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .repo-pill span {
+      color: #E5BA82;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="brand">LOOKSMITH</div>
+  <div class="tagline">Autonomous Skin & Tone-Aware Fashion Stylist</div>
+  
+  <div class="grid">
+    <div class="card">
+      <div class="card-badge">Production API 1</div>
+      <div class="card-title">AI Skin Analysis</div>
+      <div class="card-desc">Cosmetic pore, oiliness, and redness detection from selfie</div>
+    </div>
+    
+    <div class="card">
+      <div class="card-badge">Production API 2</div>
+      <div class="card-title">AI Skin Tone Analysis</div>
+      <div class="card-desc">Personalized 6-swatch CIEDE2000 tone palette & UI theme</div>
+    </div>
+    
+    <div class="card">
+      <div class="card-badge">Production API 3</div>
+      <div class="card-title">AI Clothes Virtual Try-On (Full Body)</div>
+      <div class="card-desc">Full-body garment rendering directly onto shopper photo</div>
+    </div>
+    
+    <div class="card">
+      <div class="card-badge">Production API 4</div>
+      <div class="card-title">AI Clothes Virtual Try-On (Upper Body)</div>
+      <div class="card-desc">Upper-body drape, collar styling, and silhouette try-on</div>
+    </div>
+  </div>
+
+  <div class="repo-pill">
+    <span>GitHub</span> https://github.com/roshanrateria/looksmith_ai
+  </div>
+</body>
+</html>

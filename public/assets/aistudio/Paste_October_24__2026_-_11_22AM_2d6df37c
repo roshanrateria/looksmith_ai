@@ -1,0 +1,428 @@
+# LOOKSMITH — Build Brief for AI Coding Agent
+
+You are a senior full-stack engineer and product designer (Apple/Adobe caliber). Build the project below end to end. Read the whole brief before writing code. Ask no questions. Where info is missing, pick the simplest sane default and log it in `DECISIONS.md`.
+
+---
+
+## 0. Mission
+
+Build **LOOKSMITH**: an embeddable, white-label **AI stylist widget for fashion retailers**. One selfie in. Skin-aware, shoppable, virtually tried-on looks out.
+
+Target buyers (B2B):
+- Marketplaces (Myntra, Ajio, Snapdeal type)
+- Single brands (UCB, Levi's type)
+
+Target end user: online shopper on a phone.
+
+Goal: win the **YouCam API Skin AI & eCommerce VTO Hackathon** (Devpost, Perfect Corp). Deadline Nov 2, 2026, 10:15pm GMT+5:30.
+
+**IMPORTANT — trademarks:** Demo video and screenshots must NOT show third-party trademarks. Use fictional brands only (see §9). Retailer theming must be generic and token-driven.
+
+---
+
+## 1. Judging Criteria → What We Must Show
+
+| Criterion | What wins it |
+|---|---|
+| Technological Implementation | Deep use of ≥4 YouCam APIs in one pipeline. Real agent loop. Clean code. Caching. Error handling. |
+| Design | Complete product, not a PoC. Premium, calm, human. Every state designed. |
+| Potential Impact | B2B story: higher conversion, fewer returns, bigger cart. Retailer widget drop-in. |
+| Quality of Idea | Skin AI gates makeup and colour choice. Agent self-corrects. Non-obvious. |
+
+Both hackathon tracks must be visibly covered: **Skin AI** + **eCommerce VTO**.
+
+---
+
+## 2. Core Concept
+
+Most try-on tools answer "how does this item look on me?"
+LOOKSMITH answers "what should I wear and buy, **given my skin, tone and occasion**, and how does the complete look appear on me?"
+
+Differentiators (build all):
+1. **Skin-aware makeup.** Skin Analysis results choose makeup finish and intensity.
+2. **Tone-aware palette.** Skin Tone Analysis (skin, eye, brow, lip, hair colours) builds a personal colour palette. Garments are matched to it.
+3. **Visible agent loop.** Plan → try on → critique → swap → retry. Shown live in UI.
+4. **Taste memory.** Likes/dislikes update preferences. Next looks improve.
+5. **Retailer widget mode.** One script tag. Retailer catalog in. Shoppable looks out. Theme via tokens.
+6. **Shareable Look Card.** Social loop.
+
+---
+
+## 3. Users & Primary Flow
+
+**Shopper flow (mobile-first):**
+1. Land on retailer page → tap "Style me" button (widget launcher).
+2. Consent sheet (privacy, no storage by default, delete anytime).
+3. Capture selfie (guided). Optional full-body photo (skippable; fallback to model-less garment preview or retailer model image).
+4. Scan animation while Skin Analysis + Skin Tone Analysis run in parallel.
+5. **Skin & Tone Profile** screen: concern chips, scores, palette swatches.
+6. Occasion input: chips + free text ("Cousin's wedding, evening, under ₹6000"). Budget optional.
+7. **Agent Stage** screen: live trace while looks are built.
+8. **Look Carousel**: 3 complete looks. Swipe. Each has try-on image, items, price, skin-safe badge, short "why this works" line.
+9. Actions per look: swap item, like/dislike, add all to bag, share.
+10. **Bag** summary → handoff to retailer checkout (mock).
+11. Share Look Card.
+
+**Retailer flow (B2B demo, one screen):**
+- Simple "Retailer Console" page: paste/choose catalog (seed JSON), pick theme tokens, copy embed snippet, see live preview of the widget. Show mock KPI tiles (labelled "illustrative demo data").
+
+---
+
+## 4. YouCam API Integration
+
+**Rules:**
+- Base server per docs: `https://yce-api-01.makeupar.com`. Docs: https://docs.perfectcorp.com/develop/introduction and API reference at https://docs.perfectcorp.com/api_references/skin_analysis.
+- **Do not guess endpoints, params or response shapes.** Open the docs, OpenAPI download, and API Playground first. Write typed clients from the real spec. Record findings in `docs/YOUCAM_NOTES.md`.
+- API key lives only on the server. Never in client bundle.
+- Most tasks are async. Implement create-task → poll (with backoff) and optionally webhook. Abstract as `runTask()`.
+- Respect rate limits and file retention period (see docs pages "Rate Limit", "File Retention Period"). Do not rely on YouCam URLs long-term; copy result images to own storage if needed.
+- Image limits: Skin Analysis accepts up to 4096px. Resize and compress client-side before upload. Validate size/format per docs.
+
+**APIs to use (priority order):**
+1. **AI Skin Analysis** — concerns: texture, pigmentation, pores, hydration/oiliness, redness, etc. Do not mix SD and HD concerns in one request (docs). Use the set that fits budget.
+2. **AI Skin Tone Analysis** — skin tone, eye, eyebrow, lip, hair colours.
+3. **AI Clothes (Cloth) Virtual Try-On** — use `garment_category: auto` where supported.
+4. **AI Makeup Virtual Try-On** — fetch pattern list first via the pattern-name endpoint; pick patterns by rules in §6.
+5. Stretch (cut in this order if time-short: nails → hat → scarf → bag → shoes):
+   - AI Hair colour / hairstyle
+   - Jewellery / Ring / Watch VTO
+   - Shoes VTO, Bag VTO
+
+**Unit budget:** ~1,000 free units. Design for thrift:
+- Cache every result by hash of (input image + params) in a local store.
+- Ship a `DEMO_MODE=cached` that replays saved real results for the demo persona so video recording and judge testing never fail or burn units.
+- Run independent calls in parallel (skin + tone together; cloth + makeup together).
+- Hard cap per session (e.g., 14 calls). Show graceful message at cap.
+
+---
+
+## 5. Architecture
+
+**Frontend:** Mobile-first PWA. React + TypeScript + Vite (or Next.js). Tailwind or CSS variables with design tokens. Framer Motion (or Motion One) for animation. Installable manifest. Works at 360–430px wide first, then scales to tablet/desktop with a centered device frame.
+
+**Widget:** Build the same app also as an embeddable bundle:
+- `<script src=".../looksmith.js" data-key="..." data-theme="..."></script>` injects launcher button and a full-screen iframe/sheet.
+- Communicates with host via `postMessage`: `looksmith:ready`, `looksmith:add-to-bag {sku[]}`, `looksmith:close`.
+- Include `demo-store.html`: a fictional retailer page embedding the widget.
+
+**Backend:** Node (Express/Fastify) or Python (FastAPI). Responsibilities:
+- `/api/skin` `/api/tone` `/api/tryon/cloth` `/api/tryon/makeup` — thin typed proxies over YouCam with caching, retries, polling.
+- `/api/agent/plan` `/api/agent/critique` `/api/agent/explain` — Gemini calls.
+- `/api/catalog` — serves catalog adapter output.
+- `/api/share-card` — optional server-side card render (or do client canvas).
+- Streaming progress to client via SSE for the Agent Stage.
+- Config via `.env`; ship `.env.example`.
+
+**AI model:** Gemini **3.5 Flash Lite** via Google GenAI SDK.
+- Model id from env `GEMINI_MODEL` (default to the Flash Lite id available in the SDK; verify exact string in Google AI docs and record it).
+- Use **structured JSON output** with schema validation (zod/pydantic). Temperature ≤0.4.
+- Roles: (a) Planner, (b) Critic (may use multimodal input of the try-on result), (c) Copywriter for one-line rationales.
+- **Fallback:** deterministic rules-based planner if Gemini errors or times out. App must never dead-end.
+
+**Catalog adapter:** Normalise any retailer feed to:
+```ts
+type Product = {
+  sku: string; title: string; brand: string; price: number; currency: string;
+  category: 'top'|'bottom'|'dress'|'outerwear'|'ethnic'|'shoes'|'bag'|'accessory'|'jewellery';
+  colorName: string; colorHex: string; imageUrl: string; // clean flat-lay or cutout
+  tags: string[]; occasion: string[]; url: string; inStock: boolean;
+};
+```
+Ship `seed/catalog.json` with 40–60 products across fictional brands (§9). Images: generate or use license-free/own images. No trademarked logos.
+
+**Storage:** No user photo persistence by default. In-memory/session only. Optional "Save looks" stores result thumbnails locally (IndexedDB) with explicit consent. "Delete my data" button must work.
+
+---
+
+## 6. Agent Design
+
+### 6.1 Inputs
+`SkinProfile`, `TonePalette`, `occasion` (text + chips), `budget`, `catalog`, `tasteMemory`.
+
+### 6.2 Tools exposed to the agent (internal functions)
+- `searchCatalog(filters)`
+- `tryOnCloth(userImage, sku)`
+- `tryOnMakeup(userImage, patternId, intensity)`
+- `scoreLook(look)` (local deterministic scoring, §6.4)
+- `critiqueLook(look, images)` (Gemini)
+- `swapItem(look, slot)`
+
+### 6.3 Loop (max 2 revision rounds per look)
+1. **Plan:** Gemini returns 3 look blueprints (JSON): slots → candidate SKUs, makeup intent, rationale seeds. Must respect budget and occasion.
+2. **Execute:** Run cloth VTO + makeup VTO in parallel for each look (respect session call cap; for looks 2–3 consider preview-first at lower cost, e.g., only the hero look gets full makeup+cloth, others cloth only, upgrade on tap).
+3. **Score:** deterministic score (below).
+4. **Critique:** Gemini reviews top issues (palette clash, formality mismatch, skin conflict).
+5. **Revise:** swap worst-scoring item, re-run only the affected VTO.
+6. **Finalize:** copywriter produces 1-line "why this works" + skin note.
+
+### 6.4 Deterministic scoring (0–100)
+- **Palette match (40):** ΔE (CIEDE2000 or approx) between garment `colorHex` and nearest palette swatch; reward harmony rules (analogous/complementary).
+- **Occasion fit (25):** tag overlap.
+- **Budget fit (15).**
+- **Skin-safety (20):** rules below.
+- Penalise duplicates and category conflicts.
+
+### 6.5 Skin-aware makeup rules (starter table — tune after seeing real API output)
+| Skin signal | Makeup decision |
+|---|---|
+| High oiliness / large pores | Matte or satin base finish, no glossy lips |
+| Low hydration / dry texture | Dewy/satin finish, avoid heavy matte |
+| High redness / sensitivity | Soft, low-intensity colour, avoid strong red lip; show "gentle picks" note |
+| Pigmentation / uneven tone | Medium-coverage finish; lip/eye colour from palette to balance |
+| Low concerns overall | Free choice from palette |
+Intensity slider default 40–60%. Always show the user **why** ("Chosen because your skin reads oily in T-zone").
+
+**Never give medical claims or diagnoses.** Copy says "cosmetic analysis". Add disclaimer in profile screen footer.
+
+### 6.6 Taste memory
+- Like/dislike on a look or item updates a small vector: colour families, silhouettes, price band, formality.
+- Show a visible chip: "Learning: leans earthy, relaxed fit". Allow user to clear it.
+- Next generation passes this to the planner.
+
+### 6.7 Guardrails
+- Validate every Gemini JSON against schema; retry once; then fallback.
+- Strip anything not in catalog (no hallucinated SKUs).
+- Timeouts: Gemini 12s, YouCam polling 60s total with visible progress.
+- Log agent steps as typed events for the UI trace.
+
+---
+
+## 7. Design System — "Quiet Luxury, Human First"
+
+**Design brief in one line:** a calm, editorial, confidence-building experience. Feels like a personal stylist, not a filter app. Every pixel intentional.
+
+### 7.1 Principles
+1. **Calm over loud.** Generous whitespace. One focal point per screen.
+2. **The user is the hero.** Their face/look is always the largest element. UI recedes.
+3. **Honest waiting.** Never a dead spinner. Show progress, meaning, and what is happening.
+4. **Gentle language.** Skin talk is kind, never clinical or shaming. No red "bad" scores. Use "areas to care for", not "problems".
+5. **Direct manipulation.** Drag, swipe, press, hold. Things respond under the finger.
+6. **Consistency.** 4pt grid. Same radii, same motion, same tone everywhere.
+7. **Accessible by default.** WCAG AA contrast, 44×44pt targets, screen-reader labels, reduced-motion support.
+
+### 7.2 Design tokens (CSS variables; retailer can override a subset)
+```
+/* Colour — neutral base */
+--canvas:        #FAF8F5;   /* warm off-white */
+--surface:       #FFFFFF;
+--surface-2:     #F3EFE9;
+--ink:           #14110F;
+--ink-2:         #5B554E;
+--ink-3:         #8F887F;
+--hairline:      rgba(20,17,15,0.08);
+--danger:        #B3261E;   /* errors only */
+--success:       #2E7D5B;
+
+/* Dynamic accent — set AFTER tone analysis from user's palette, fallback brand */
+--accent:        #1F3A34;
+--accent-soft:   color-mix(in srgb, var(--accent) 12%, white);
+--on-accent:     #FFFFFF;
+
+/* Dark mode: canvas #0F0E0D, surface #1A1816, ink #F4F1EC; keep accent contrast ≥ 4.5:1 */
+
+/* Type */
+--font-display:  "Instrument Serif", "Cormorant Garamond", Georgia, serif;
+--font-ui:       "Inter", -apple-system, "SF Pro Text", system-ui, sans-serif;
+Scale (px/line): Display 40/44 · Title 28/34 · Headline 20/26 · Body 16/24 · Callout 14/20 · Caption 12/16
+Weights: display 400, UI 400/500/600. Tight tracking on display (-0.01em). Tabular numerals for prices/scores.
+
+/* Space (4pt): 4 8 12 16 20 24 32 40 56 72 */
+/* Radius: chips 999 · buttons 14 · cards 24 · sheets 28 · images 20 */
+/* Elevation: e1 0 1px 2px rgba(20,17,15,.06) · e2 0 8px 24px rgba(20,17,15,.08) · e3 0 24px 60px rgba(20,17,15,.14) */
+```
+Retailer-overridable: `--accent`, `--font-display`, `--radius-scale`, logo slot, launcher style. Nothing else.
+
+**Dynamic accent:** after Tone Analysis, derive an accent from the user's palette (pick the most flattering deep swatch with AA contrast against `--on-accent`). The whole UI subtly tints with a 480ms crossfade. This is the signature moment: "the app became yours."
+
+### 7.3 Motion language
+- Easing standard: `cubic-bezier(0.2, 0.8, 0.2, 1)`. Springs for direct manipulation: stiffness 300, damping 30, mass 1.
+- Durations: micro 120ms · small 200ms · medium 320ms · large 480ms · hero 640ms.
+- Stagger lists by 40–60ms, max 8 items.
+- Transitions are **spatial**: shared-element hero image from card → detail; sheets rise from bottom with rubber-banding; back swipe edge gesture.
+- Respect `prefers-reduced-motion`: replace movement with 120ms fades. Never lose information.
+- Haptics: `navigator.vibrate` short pulses (10–15ms) on success/commit where supported. Graceful no-op elsewhere.
+- Animate only `transform` and `opacity`. Target 60fps on a mid-range Android.
+
+### 7.4 Micro-interaction catalogue (build all, each precisely)
+**Capture**
+- Face guide: soft oval. Idle = thin 1.5px hairline. When face is centred, lit, and sharp → ring thickens to 3px and fills with accent via a 320ms stroke animation + light haptic. Live hints in plain words: "Move a little closer", "Find softer light", "Hold still".
+- Shutter: press scales to 0.94, release springs back; flash overlay 80ms; captured image shrinks into a thumbnail at the corner with a spring.
+- Retake/Use buttons: magnetic hover on desktop, press-down depth on touch.
+
+**Scan & Profile**
+- Scanning: a soft light band sweeps over the face (1.4s ease-in-out, loop) with subtle vignette. Copy cycles: "Reading your skin tone…", "Looking at texture…", "Finding your palette…".
+- Result reveal: concern overlays fade in staggered (60ms) as gentle dots/blooms over the photo; tap a chip → matching region pulses once and others dim to 40%.
+- Scores count up with tabular numerals (600ms ease-out). No red. Use a calm single-hue ramp.
+- Palette swatches pop in like drops (scale 0.6→1 spring, 50ms stagger). Long-press a swatch → shows name ("Warm Sand") and copy hex.
+- Accent takeover crossfade (see 7.2).
+
+**Occasion input**
+- Chips with spring select (scale 1.04 → 1), check morph. Free-text field grows smoothly; placeholder rotates examples every 3s.
+- Budget slider: thumb enlarges while dragging; live value bubble above thumb; snaps softly at nice numbers; haptic ticks.
+
+**Agent Stage (hero moment — spend design effort here)**
+- Vertical timeline of agent steps streamed via SSE. Each step: icon → morphs to animated check (stroke draw, 240ms) when done.
+- Steps in human language: "Choosing colours from your palette", "Trying on the olive linen shirt", "Checking skin comfort for your makeup", "Swapped the red scarf — it clashed with your undertone".
+- The swap/self-correction step gets emphasis: strikethrough old item → slide in new item (shared-element), subtle accent underline.
+- Live thumbnails of looks "develop" like film: blurred monochrome → colour sharpen over 640ms as each VTO returns.
+- Never show raw JSON, model names, or jargon. A discreet "Details" disclosure shows technical trace for judges (YouCam tool + Gemini role per step).
+
+**Look Carousel**
+- Horizontal paged cards with peek of next card. Rubber-band at ends. Parallax: image moves 8% slower than card on drag.
+- Subtle gyro/pointer tilt (max 3°) on the hero image; disabled for reduced motion.
+- Before/after: press-and-hold image to peek original; or drag a handle with magnetic snap at 0/50/100%.
+- Skin-safe badge: shield icon draws in (stroke 400ms) on card appear. Tap → bottom sheet explaining why in kind language.
+- Item chips under image: tap → item sheet with swap alternatives (3 options, each previewed with a mini try-on thumbnail when affordable; otherwise flat-lay).
+- Swap: old item chip lifts and fades; new chip slides into place; hero image shows a soft shimmer sweep while VTO re-renders, then crossfades (320ms).
+- Like: heart bloom (scale 1→1.25→1 + 6 tiny particles), then a "Learning" chip floats up and docks in header. Dislike: soft shrink + gentle fade of card with Undo toast (5s).
+- Intensity slider for makeup: live label ("Soft ↔ Bold"); releasing triggers re-render with progress ring on the slider thumb.
+
+**Bag**
+- Add to bag: item thumbnails arc along a curved path into the bag icon (480ms); icon bounces once; count morphs (odometer roll).
+- Bag sheet: swipe-to-remove with undo; price total animates numerically; "Checkout on {Retailer}" primary button full width, press depth.
+
+**Share Look Card**
+- Card renders as a poster: user's look, name of look, palette dots, skin-safe badge, retailer logo slot, small "Styled with LOOKSMITH". No raw face-analysis scores on card by default (privacy toggle to include).
+- Hold-to-share: circular progress around button fills over 600ms then fires native share; fallback download PNG.
+- Preview tilts with device motion; subtle foil shimmer on palette dots.
+
+**System states**
+- Skeletons match final layout (shimmer 1.6s, low contrast).
+- Image load: blur-up (LQIP) → sharp crossfade 320ms.
+- Errors: friendly, specific, one clear action. Example: "That photo was a bit dark. Try near a window." + [Retake].
+- Offline/slow: persistent unobtrusive banner; queue actions where sensible.
+- Empty states have illustration + one action.
+- Toasts: bottom, 3s, swipe to dismiss, never cover primary CTA.
+
+### 7.5 Layout & components
+- Safe-area aware (`env(safe-area-inset-*)`). Sticky bottom action bar with blur (backdrop-filter) and hairline top border.
+- Primary button: 52px height, full width on mobile, accent fill, on-accent text, 14px radius. Secondary: surface-2 fill. Tertiary: text only.
+- Bottom sheets with grabber, snap points (peek/half/full), drag-to-dismiss with velocity.
+- Typography hierarchy: serif display for emotional moments (headlines, look names); UI sans for everything functional.
+- Iconography: single family, 1.5px stroke, rounded caps (e.g., Lucide). Custom-draw only the shield badge and logo mark.
+- Imagery: photos with soft 20px radius, no heavy borders, subtle inner shadow `inset 0 0 0 1px var(--hairline)`.
+
+### 7.6 Copy & tone
+Warm, brief, respectful. Short sentences. No exclamation spam. No beauty-shaming. No medical language. Examples:
+- Consent: "Your photo is used only to style you. It isn't stored unless you save a look."
+- Profile: "Here's what we noticed. This is a cosmetic read, not medical advice."
+- Skin-safe: "Chosen to feel gentle on skin that runs a little sensitive."
+
+### 7.7 Accessibility checklist
+- Contrast AA in light and dark. Visible focus rings (2px accent, 2px offset).
+- All interactive elements labelled; images have meaningful `alt` (look descriptions).
+- Dynamic type: layout survives 130% text scale.
+- Animations have reduced-motion equivalents. No flashing >3Hz.
+- Don't rely on colour alone to convey state.
+- Camera permission denied → clear fallback: upload from gallery.
+
+### 7.8 Responsive behaviour
+- ≤430px: native-app feel, bottom nav/action bar.
+- 431–1024px: centered 430px app column over soft background.
+- ≥1025px: split view for judges: app on left in phone frame; right side shows optional "Under the hood" panel (agent trace + API calls + unit counter). Toggle-able, off in widget.
+
+---
+
+## 8. Screens (build list)
+1. Welcome / launcher preview
+2. Consent sheet
+3. Capture (camera + upload fallback)
+4. Scanning
+5. Skin & Tone Profile
+6. Occasion & budget
+7. Agent Stage
+8. Look Carousel (+ item swap sheet, skin-safe sheet, makeup intensity sheet)
+9. Bag sheet
+10. Share Look Card
+11. Settings sheet (clear taste memory, delete data, theme)
+12. Retailer Console (embed code, theme tokens, catalog preview, demo KPIs)
+13. `demo-store.html` (fictional retailer page hosting the widget)
+
+Every screen needs: default, loading, empty (if applicable), error, and reduced-motion variants.
+
+---
+
+## 9. Demo Content
+- Fictional retailers: **"Meridian Mart"** (marketplace) and **"Northloom Denim Co."** (single brand). Original logos (simple wordmarks).
+- 2–3 demo personas with cached real API results for reliable replay (different skin signals so the skin-aware swap is visible).
+- Include a seeded "hero scenario" for the video where the agent visibly swaps a clashing item and adjusts makeup finish because of skin data.
+- Do NOT include copyrighted music or third-party marks anywhere in repo assets.
+
+---
+
+## 10. Privacy & Safety
+- Explicit consent before camera/photo use. Clear plain-language policy link.
+- No face data stored server-side beyond request lifetime unless user opts in.
+- Delete button wipes local and server session artifacts.
+- Don't infer or display age, gender, ethnicity, health conditions.
+- Cosmetic-only language. Footer disclaimer on profile screen.
+- Rate-limit endpoints; validate uploads; strip EXIF; cap file size.
+
+---
+
+## 11. Engineering Quality Bar
+- TypeScript strict. ESLint + Prettier. No `any` without comment.
+- Unit tests for: scoring, palette ΔE, skin→makeup rules, catalog adapter, planner JSON validation.
+- One e2e smoke test (Playwright) running the full flow in `DEMO_MODE=cached`.
+- Lighthouse mobile: Performance ≥85, Accessibility ≥95.
+- Error boundaries; no unhandled promise rejections; user-facing errors always actionable.
+- Structured logs for agent events (also feeds the UI "Under the hood" panel).
+- README with: 60-second quickstart, env vars, demo mode, architecture diagram (Mermaid), YouCam APIs used and where in code, how to get free units, how to embed the widget, license (MIT).
+- `docs/SCREENSHOTS/` with 6–8 polished screenshots.
+
+---
+
+## 12. Milestones (build in this order; ship a working vertical slice first)
+1. **Slice 1:** upload selfie → Skin + Tone API → Profile screen (real data).
+2. **Slice 2:** Cloth VTO for one SKU → result image.
+3. **Slice 3:** Makeup VTO with pattern selection by rules.
+4. **Slice 4:** Gemini planner + deterministic scorer + critique/swap loop + SSE Agent Stage.
+5. **Slice 5:** Look Carousel, swap, like/dislike, taste memory.
+6. **Slice 6:** Bag, Share Look Card.
+7. **Slice 7:** Widget bundle + `demo-store.html` + Retailer Console.
+8. **Slice 8:** Motion polish pass, accessibility pass, cached demo mode, tests, README, screenshots.
+9. **Stretch:** hair colour, jewellery, shoes.
+
+At the end of each slice the app must run. Do not leave the repo broken.
+
+---
+
+## 13. Acceptance Checklist (must all pass)
+- [ ] Uses ≥4 YouCam APIs in one working flow (Skin Analysis, Skin Tone Analysis, Clothes VTO, Makeup VTO).
+- [ ] Gemini Flash Lite plans and critiques; fallback works when key is invalid.
+- [ ] Agent Stage visibly shows at least one self-correction.
+- [ ] Skin result visibly changes makeup finish AND is explained to the user.
+- [ ] Tone palette changes the UI accent and drives garment matching.
+- [ ] Widget embeds in `demo-store.html` via one script tag and returns SKUs to the host.
+- [ ] Theme tokens switch the look for both fictional retailers.
+- [ ] Share Look Card exports a PNG / native share.
+- [ ] No YouCam or Gemini keys in client code or git history.
+- [ ] `DEMO_MODE=cached` runs fully offline of YouCam.
+- [ ] All states designed: loading, empty, error, offline, permission denied.
+- [ ] Reduced-motion and dark mode verified.
+- [ ] Works on a real phone (iOS Safari + Android Chrome). Record demo on the real device.
+- [ ] README lets a judge run it in under 5 minutes.
+- [ ] No third-party trademarks or copyrighted music in assets.
+
+---
+
+## 14. Demo Video Script Support (generate `docs/DEMO_SCRIPT.md`)
+Target 2:50 runtime. Structure:
+- 0:00–0:20 Problem: wrong shade, wrong colour, returns.
+- 0:20–1:50 Live flow on phone: selfie → profile → occasion → agent stage → looks.
+- 1:50–2:15 Hero moment: agent self-corrects due to skin/tone data.
+- 2:15–2:40 Retailer Console + widget in fictional store + Look Card.
+- 2:40–2:50 On-screen list of YouCam APIs used. Close.
+Also generate captions text and a 150-word Devpost description, plus a features list.
+
+---
+
+## 15. Things To Avoid
+- Generic "filter app" look: neon gradients, glossy glassmorphism overload, emoji icons.
+- Dead spinners. Walls of text. Tiny tap targets.
+- Showing numbers without meaning.
+- Over-claiming accuracy or medical benefit.
+- Building features that do not appear in the demo path before the core is polished.
+- Hard-coding fake outputs without labelling them as demo data.
+
+Begin with the repo scaffold, `DECISIONS.md`, and `docs/YOUCAM_NOTES.md` (from reading the real docs). Then execute slices in order.
