@@ -27,23 +27,24 @@
 ## 🏗️ Architecture
 
 ```mermaid
-graph TD
-  User([Shopper Selfie]) --> SkinAI[YouCam AI Skin Analysis]
-  User --> ToneAI[YouCam AI Skin Tone Analysis]
+flowchart TD
+    User(["Shopper Selfie"]) --> SkinAI["YouCam AI Skin Analysis"]
+    User --> ToneAI["YouCam AI Skin Tone Analysis"]
 
-  SkinAI --> Profile[Skin & Tone Profile]
-  ToneAI --> Profile
-  Profile --> DynamicUI[Dynamic UI Accent Tint]
+    SkinAI --> Profile["Skin & Tone Profile"]
+    ToneAI --> Profile
+    Profile --> DynamicUI["Dynamic UI Accent Tint"]
 
-  Profile & Occasion[Occasion & Budget] --> GeminiPlanner[Gemini 2.5 Flash Lite Planner]
-  Catalog[(Retailer Catalog JSON)] --> GeminiPlanner
+    Profile --> GeminiPlanner["Gemini 2.5 Flash Lite Planner"]
+    Occasion["Occasion & Budget"] --> GeminiPlanner
+    Catalog[("Retailer Catalog JSON")] --> GeminiPlanner
 
-  GeminiPlanner --> TryOn[YouCam Clothes VTO + Makeup VTO]
-  TryOn --> Scorer[CIEDE2000 & Skin-Safety Deterministic Scorer]
-  Scorer --> GeminiCritic[Gemini Critic & Self-Correction]
-  GeminiCritic -- "Swap Clashing SKU" --> TryOn
-  GeminiCritic --> FinalLooks[Look Carousel & Shoppable Bag]
-  FinalLooks --> RetailerCheckout([Retailer Cart postMessage])
+    GeminiPlanner --> TryOn["YouCam Clothes VTO + Makeup VTO"]
+    TryOn --> Scorer["CIEDE2000 & Skin-Safety Deterministic Scorer"]
+    Scorer --> GeminiCritic["Gemini Critic & Self-Correction"]
+    GeminiCritic -- "Swap Clashing SKU" --> TryOn
+    GeminiCritic --> FinalLooks["Look Carousel & Shoppable Bag"]
+    FinalLooks --> RetailerCheckout(["Retailer Cart postMessage"])
 ```
 
 ---
